@@ -31,7 +31,7 @@ int main(int argc, char *argv[])
     Mat plotImage(imageSize,CV_8UC3,Scalar(255,255,255));//デバッグ用に白いVer.
     //カメラ検出
     VideoCapture cap(0);
-    
+
     //カメラ検出できない場合、エラーで終了
 //    if(!cap.isOpened())
 //    {
@@ -41,11 +41,11 @@ int main(int argc, char *argv[])
     //if車両からクロソイドパラメータ受信した場合
     /*作成する*/
         //plotImageにOverRay用クロソイド曲線描画
-        DrawClothoid(0.0f,0.0f,0.0f,100.0f,2.0f,0.0f,10,&plotImage);
+        DrawClothoid(0.0f,0.0f,0.0f,10.0f,0.0f,0.0f,10,&plotImage);
 
     //else if車両が走行中の場合
         //車両挙動に合わせてplotImageを平行移動・回転させる
-    
+
     //カメラ画像読み込み
     Mat camImage(Size(640, 480), CV_8UC3, Scalar(255,0,0));
 
@@ -56,7 +56,7 @@ int main(int argc, char *argv[])
     namedWindow("drawing", CV_WINDOW_AUTOSIZE|CV_WINDOW_FREERATIO);
     imshow("drawing", overrayImage);
     waitKey(0);
-    
+
     return 0;
 }
 
@@ -77,7 +77,7 @@ void DrawClothoid(float x0,float y0,float phi0,float h,float phiV,float phiU,int
   float w = 1/(float)n;
   float s = 0.0f,cv0 = 0.0f,cv1 = 0.0f,x = 0.0f,y = 0.0f;
   std::complex<float>half(0.5f,0.0f),wcpx(w,0.0f);
- 
+
   for (int8_t i=0; i<n; i++){
     //積分(台形法)
     integral += (Slope(phi0, phiV, phiU, s) + Slope(phi0, phiV, phiU, s+w)) * half * wcpx;
@@ -99,6 +99,10 @@ void DrawClothoid(float x0,float y0,float phi0,float h,float phiV,float phiU,int
 
 void ImageOverray(Mat plotImage,Mat camImage,Mat *outImage)
 {
+    //http://www.mdpi.com/1424-8220/12/4/4431/htm
+    //I-TVTM変換する
+    //http://robotex.ing.ee/2012/01/coordinate-mapping/
+
     Mat plotImageExpd;
     Size sizePltImgExpd(camImage.cols,camImage.cols);
     resize(plotImage,plotImageExpd,sizePltImgExpd);
@@ -109,12 +113,12 @@ void ImageOverray(Mat plotImage,Mat camImage,Mat *outImage)
                                 Point2f(             0.0f , 0.5f * plotImageExpd.rows),
                                 Point2f(plotImageExpd.cols,                     0.0f ),
                                 Point2f(plotImageExpd.cols, 0.5f * plotImageExpd.rows)  };
-    
+
     const Point2f dst_pt[] = {  Point2f( 0.0f * plotImageExpd.cols , 0.5f * plotImageExpd.rows),
                                 Point2f(-1.0f * plotImageExpd.cols ,        plotImageExpd.rows),
                                 Point2f( 1.0f * plotImageExpd.cols , 0.5f * plotImageExpd.rows),
                                 Point2f( 2.0f * plotImageExpd.cols ,        plotImageExpd.rows)  };
-    
+
     //Homography 行列を計算
     const Mat hom_matrix = getPerspectiveTransform(src_pt,dst_pt);
     warpPerspective(plotImageExpd, plotImageExpd, hom_matrix, sizePltImgExpd);
