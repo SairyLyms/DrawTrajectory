@@ -47,7 +47,7 @@ int main(int argc, char *argv[])
         //車両挙動に合わせてplotImageを平行移動・回転させる
 
     //カメラ画像読み込み
-    Mat camImage(Size(640, 480), CV_8UC3, Scalar(255,0,0));
+    Mat camImage(Size(640, 640), CV_8UC3, Scalar(255,0,0));
 
     //Overray画像作成プログラム
     Mat overrayImage;
@@ -103,9 +103,20 @@ void ImageOverray(Mat plotImage,Mat camImage,Mat *outImage)
     //I-TVTM変換する
     //http://robotex.ing.ee/2012/01/coordinate-mapping/
 
-    Mat plotImageExpd;
-    Size sizePltImgExpd(camImage.cols,camImage.cols);
+    //アルファブレンディング参考
+    //http://catalina1344.hatenablog.jp/entry/2014/05/07/210321
+    //https://www.learnopencv.com/alpha-blending-using-opencv-cpp-python/
+
+    int maxVal = pow(2, 8*camImage.elemSize1())-1;
+    Size sizePltImgExpd(camImage.rows,camImage.cols);
+    Mat plotImageExpd,plotImageExpdAlpha,plotImageDst_rgb,plotImageDst_Alpha,camImageDst_Alpha;
+
+    //チャンネル情報ベクタ
+    std::vector<Mat>plotImage_rgba,plotImage_rgb, plotImage_alpha,camImage_alpha;
+
     resize(plotImage,plotImageExpd,sizePltImgExpd);
+    cvtColor(camImage, camImage, CV_RGB2RGBA);//アルファチャンネル化
+    cvtColor(plotImageExpd, plotImageExpd, CV_RGB2RGBA);//アルファチャンネル化
 
     // 1  3
     // 2  4 の順番
@@ -119,10 +130,42 @@ void ImageOverray(Mat plotImage,Mat camImage,Mat *outImage)
                                 Point2f( 1.0f * plotImageExpd.cols , 0.5f * plotImageExpd.rows),
                                 Point2f( 2.0f * plotImageExpd.cols ,        plotImageExpd.rows)  };
 
-    //Homography 行列を計算
+    //Homography 行列を計算し変形
     const Mat hom_matrix = getPerspectiveTransform(src_pt,dst_pt);
     warpPerspective(plotImageExpd, plotImageExpd, hom_matrix, sizePltImgExpd);
 
-    *outImage = plotImageExpd;
+    plotImageExpdAlpha = plotImageExpd.clone();
 
+    //黒部分を透明化したマスク画像作成
+    for (int y = 0; y < plotImageExpdAlpha.rows; ++y) {
+        for (int x = 0; x < plotImageExpdAlpha.cols; ++x) {
+            cv::Vec4b px = plotImageExpdAlpha.at<Vec4b>(x, y);
+            if (px[0] + px[1] + px[2] == 0) {
+                px[3] = 0;
+                plotImageExpdAlpha.at<Vec4b>(x, y) = px;
+            }
+            //std::cout << "x," << x << "y," << y << "Alp," << px << std::endl;
+        }
+    }
+
+    split(plotImageExpdAlpha, plotImage_rgba);
+    for(int8_t i=0;i<3;i++){
+        plotImage_rgb.push_back(plotImage_rgba[i]);
+    }
+    plotImage_alpha.push_back(plotImage_rgba[3]);
+    camImage_alpha.push_back(maxVal-plotImage_rgba[3]);
+
+    merge(plotImage_rgb, plotImageDst_rgb);
+    merge(plotImage_alpha, plotImageDst_Alpha);
+    merge(camImage_alpha, camImageDst_Alpha);
+
+    std::cout << plotImageDst_rgb.size() << std::endl;
+    std::cout << plotImageDst_Alpha.size() << std::endl;
+    std::cout << camImageDst_Alpha.size() << std::endl;
+    std::cout << camImage.size() << std::endl;
+
+    *outImage = plotImageDst_rgb;//.mul(plotImageDst_Alpha,1.0f/(double)maxVal) + camImage.mul(camImageDst_Alpha,1.0f/(double)maxVal);
+    //img_rgb.mul(img_aaa, 1.0/(double)maxVal) + baseImg.mul(img_1ma, 1.0/(double)maxVal);
+
+    //*outImage = plotImageExpd;
 }
