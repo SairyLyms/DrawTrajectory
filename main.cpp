@@ -12,12 +12,20 @@
 #include <opencv2/imgproc.hpp>
 #include <opencv2/highgui.hpp>
 #include <opencv2/imgcodecs.hpp>
+#include <sys/socket.h>
+#include <bluetooth/bluetooth.h>
+#include <bluetooth/hci.h>
+#include <bluetooth/hci_lib.h>
+
+#define SERIAL_PORT "/dev/serial0"
+
 template<class T, size_t N> size_t countof(const T (&array)[N]) { return N; }
 using namespace cv;
 
 int DrawLines(void);
 void DrawClothoid(float x0,float y0,float phi0,float h,float phiV,float phiU,int8_t n,Mat *image);
 void ImageOverray(Mat plotImage,Mat camImage,Mat *outImage);
+int SimpleScan(void);
 
 float pi()
 {
@@ -26,9 +34,10 @@ float pi()
 
 int main(int argc, char *argv[])
 {
+    SimpleScan();
     CvSize imageSize = cvSize(200, 200);
     //Mat plotImage = Mat::zeros(imageSize,CV_8UC3);
-    Mat plotImage(imageSize,CV_8UC3,Scalar(255,255,255));//デバッグ用に白いVer.
+    Mat plotImage(imageSize,CV_8UC3,Scalar(0,0,0));//デバッグ用に白いVer.
     //カメラ検出
     VideoCapture cap(0);
 
@@ -41,7 +50,7 @@ int main(int argc, char *argv[])
     //if車両からクロソイドパラメータ受信した場合
     /*作成する*/
         //plotImageにOverRay用クロソイド曲線描画
-        DrawClothoid(0.0f,0.0f,0.0f,10.0f,0.0f,0.0f,10,&plotImage);
+        DrawClothoid(0.0f,0.0f,0.0f,100.0f,0.0f,0.0f,10,&plotImage);
 
     //else if車両が走行中の場合
         //車両挙動に合わせてplotImageを平行移動・回転させる
@@ -115,7 +124,7 @@ void ImageOverray(Mat plotImage,Mat camImage,Mat *outImage)
     std::vector<Mat>plotImage_rgba,plotImage_rgb, plotImage_alpha,camImage_alpha;
 
     resize(plotImage,plotImageExpd,sizePltImgExpd);
-    cvtColor(camImage, camImage, CV_RGB2RGBA);//アルファチャンネル化
+    //cvtColor(camImage, camImage, CV_RGB2RGBA);//アルファチャンネル化
     cvtColor(plotImageExpd, plotImageExpd, CV_RGB2RGBA);//アルファチャンネル化
 
     // 1  3
@@ -151,21 +160,17 @@ void ImageOverray(Mat plotImage,Mat camImage,Mat *outImage)
     split(plotImageExpdAlpha, plotImage_rgba);
     for(int8_t i=0;i<3;i++){
         plotImage_rgb.push_back(plotImage_rgba[i]);
+        plotImage_alpha.push_back(plotImage_rgba[3]);
+        camImage_alpha.push_back(maxVal-plotImage_rgba[3]);
     }
-    plotImage_alpha.push_back(plotImage_rgba[3]);
-    camImage_alpha.push_back(maxVal-plotImage_rgba[3]);
 
     merge(plotImage_rgb, plotImageDst_rgb);
     merge(plotImage_alpha, plotImageDst_Alpha);
     merge(camImage_alpha, camImageDst_Alpha);
 
-    std::cout << plotImageDst_rgb.size() << std::endl;
-    std::cout << plotImageDst_Alpha.size() << std::endl;
-    std::cout << camImageDst_Alpha.size() << std::endl;
-    std::cout << camImage.size() << std::endl;
-
-    *outImage = plotImageDst_rgb;//.mul(plotImageDst_Alpha,1.0f/(double)maxVal) + camImage.mul(camImageDst_Alpha,1.0f/(double)maxVal);
-    //img_rgb.mul(img_aaa, 1.0/(double)maxVal) + baseImg.mul(img_1ma, 1.0/(double)maxVal);
-
-    //*outImage = plotImageExpd;
+    *outImage = plotImageDst_rgb.mul(plotImageDst_Alpha,1.0/(double)maxVal) + camImage.mul(camImageDst_Alpha,1.0f/(double)maxVal);
 }
+
+//rfcommで通信
+//20:15:12:29:14:76  RobotCAR
+//https://www.experts-exchange.com/questions/24194332/how-to-send-data-via-bluetooth-in-linux.html
