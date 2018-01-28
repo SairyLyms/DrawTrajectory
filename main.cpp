@@ -2,9 +2,11 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/ioctl.h>
+#include <sys/socket.h>
 #include <fcntl.h>
 #include <termios.h>
 #include <unistd.h>
+#include <string.h>
 #include <iostream>
 #include <complex>
 #include <string>
@@ -15,19 +17,14 @@
 #include <opencv2/imgcodecs.hpp>
 #include <sys/socket.h>
 #include <bluetooth/bluetooth.h>
-#include <bluetooth/hci.h>
-#include <bluetooth/hci_lib.h>
-
-#define SERIAL_PORT "/dev/serial0"
-
+#include <bluetooth/rfcomm.h>
+#include "BTComm.h"
 template<class T, size_t N> size_t countof(const T (&array)[N]) { return N; }
 using namespace cv;
-int fd;
 
 int DrawLines(void);
 void DrawClothoid(float x0,float y0,float phi0,float h,float phiV,float phiU,int8_t n,Mat *image);
 void ImageOverray(Mat plotImage,Mat camImage,Mat *outImage);
-int ReadVehicleDataBT(float *yawAngle);
 
 float pi()
 {
@@ -36,9 +33,8 @@ float pi()
 
 int main(int argc, char *argv[])
 {
-    fd = open("/dev/rfcomm0", O_RDWR);
+    OpenBT(&sockBT);
     CvSize imageSize = cvSize(200, 200);
-
     //カメラ検出
     VideoCapture cap(0);
     //カメラ検出できない場合、エラーで終了
@@ -46,16 +42,15 @@ int main(int argc, char *argv[])
 //    {
 //        return -1;
 //    }
-    namedWindow("drawing", CV_WINDOW_AUTOSIZE|CV_WINDOW_FREERATIO);
+    //namedWindow("drawing", CV_WINDOW_AUTOSIZE|CV_WINDOW_FREERATIO);
     //車両情報受信プログラム(bluetooth通信)
     //if車両からクロソイドパラメータ受信した場合
     /*作成する*/
     //else if車両が走行中の場合
         //車両挙動に合わせてplotImageを平行移動・回転させる
-    float yawAngle = 0.0f;
     while(1){
-        ReadVehicleDataBT(&yawAngle);
-
+        ReadBT(&sockBT);
+        #if 1
         Mat plotImage(imageSize,CV_8UC3,Scalar(0,0,0));//デバッグ用に白いVer.
         //カメラ画像読み込み
         //Mat camImage(Size(640, 640), CV_8UC3, Scalar(255,200,200));
@@ -65,11 +60,11 @@ int main(int argc, char *argv[])
         //Overray画像作成プログラム
         Mat overrayImage;
         ImageOverray(plotImage,camImage,&overrayImage);
-
         imshow("drawing", overrayImage);
-        waitKey(30);
+        waitKey(1);
+        #endif
     }
-    close(fd);
+    CloseBT(&sockBT);
     return 0;
 }
 
@@ -171,47 +166,4 @@ void ImageOverray(Mat plotImage,Mat camImage,Mat *outImage)
     merge(camImage_alpha, camImageDst_Alpha);
 
     *outImage = plotImageDst_rgb.mul(plotImageDst_Alpha,1.0/(double)maxVal) + camImage.mul(camImageDst_Alpha,1.0f/(double)maxVal);
-}
-
-//rfcommで通信
-//http://www.cs.grinnell.edu/~walker/bluetooth-with-c/development-notes.shtml
-//20:15:12:29:14:76  RobotCAR
-//https://www.experts-exchange.com/questions/24194332/how-to-send-data-via-bluetooth-in-linux.html
-
-int ReadVehicleDataBT(float *yawAngle)
-{
-    int i=0;
-    int nbytes = 255;
-    char message[nbytes] = {};
-    std::string messageStr = "";
-
-    if (fd < 0) {
-        std::cout << "Error:can't connect with BT" << std::endl;
-        return -1;
-    }
-
-    while (i < nbytes){
-        i += read(fd, &message[i], 1);
-
-        if(message[i] == 0x0A){
-            break;}
-    }
-    messageStr = message;
-
-    int posYawAngle = (int)messageStr.find("yawAng,")+7;
-    if(posYawAngle > 0){
-        float f = 0.0f;
-            try{
-                f = std::stof(messageStr.substr(posYawAngle,4));
-                } catch (std::invalid_argument) {
-                    f = 0.0f;
-                } catch (std::out_of_range) {
-                    f = 0.0f;
-                }
-        *yawAngle = f;   
-        std::cout << "YawAngle," << *yawAngle << std::endl;
-    }
-    tcflush(fd,TCIFLUSH);
-
-    return 0;
 }
