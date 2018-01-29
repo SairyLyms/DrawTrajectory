@@ -24,6 +24,7 @@ using namespace cv;
 
 int DrawLines(void);
 void DrawClothoid(float x0,float y0,float phi0,float h,float phiV,float phiU,int8_t n,Mat *image);
+void DrawClothoidSimple(float h,float phiV,float phiU,float odo,int8_t n,Mat *image);
 void ImageOverray(Mat plotImage,Mat camImage,Mat *outImage);
 
 float pi()
@@ -33,7 +34,7 @@ float pi()
 
 int main(int argc, char *argv[])
 {
-    OpenBT(&sockBT);
+    //OpenBT(&sockBT);
     CvSize imageSize = cvSize(200, 200);
     //カメラ検出
     VideoCapture cap(0);
@@ -49,22 +50,23 @@ int main(int argc, char *argv[])
     //else if車両が走行中の場合
         //車両挙動に合わせてplotImageを平行移動・回転させる
     while(1){
-        ReadBT(&sockBT);
+        //ReadBT(&sockBT);
         #if 1
         Mat plotImage(imageSize,CV_8UC3,Scalar(0,0,0));//デバッグ用に白いVer.
         //カメラ画像読み込み
         //Mat camImage(Size(640, 640), CV_8UC3, Scalar(255,200,200));
         Mat camImage = imread("road.png");
         //plotImageにOverRay用クロソイド曲線描画
-        DrawClothoid(0.0f,0.0f,yawAngle,100.0f,0.0f,0.0f,10,&plotImage);
+        //DrawClothoid(0.0f,0.0f,yawAngle,100.0f,0.0f,0.0f,10,&plotImage);
+        DrawClothoidSimple(100.0f,0.0f,0.0f,0.0f,10,&plotImage);
         //Overray画像作成プログラム
         Mat overrayImage;
         ImageOverray(plotImage,camImage,&overrayImage);
         imshow("drawing", overrayImage);
-        waitKey(1);
+        waitKey(10);
         #endif
     }
-    CloseBT(&sockBT);
+    //CloseBT(&sockBT);
     return 0;
 }
 
@@ -100,6 +102,47 @@ void DrawClothoid(float x0,float y0,float phi0,float h,float phiV,float phiU,int
     float xRend = -x + 100,yRend = -y + 100;
     clothoidPt[i] = Point(yRend,xRend);//Clothoid x,y rendering
     circle (*image, clothoidPt[i], 5, cv::Scalar(200,180,0), -1, CV_AA);
+  }
+}
+
+void DrawClothoidSimple(float h,float phiV,float phiU,float odo,int8_t n,Mat *image)
+{
+    //車両から取得した軌跡情報による描画
+    Point clothoidPt[10] = {};
+
+    std::complex<float> integral(0,0);
+    float odoNorm = 0.0f;
+    float w = 0.0f;
+    float s = 0.0f,x = 0.0f,y = 0.0f;
+    std::complex<float>half(0.5f,0.0f),wcpx(w,0.0f);
+
+    if(odo > h){
+        odoNorm = 1.0f;
+        }
+    else if(odo < 0){
+        odoNorm = 0.0f;
+        }
+    else{
+        odoNorm = odo/h;
+    }
+    w = (1.0f - odoNorm) / n;
+    wcpx = std::complex<float>(w,0.0f);
+    for (int8_t i=0; i<n; i++){
+        //積分(台形法)
+        integral += (Slope(0, phiV, phiU, s) + Slope(0, phiV, phiU, s+w)) * half * wcpx;
+        s += w;
+
+        x = h * std::abs(integral) * std::cos(std::arg(integral));
+        y = h * std::abs(integral) * std::sin(std::arg(integral));
+#if 0
+        std::cout << "x,"<< x << "y," << y << std::endl;
+        std::cout << "arg,"<< std::arg(integral) << std::endl;
+        std::cout << "integral,"<< integral << std::endl;
+#endif
+        //描画関数
+        float xRend = -x + 100,yRend = -y + 100;
+        clothoidPt[i] = Point(yRend,xRend);//Clothoid x,y rendering
+        circle (*image, clothoidPt[i], 5, cv::Scalar(200,180,0), -1, CV_AA);
   }
 }
 
