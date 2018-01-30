@@ -1,3 +1,5 @@
+#include <ncurses.h>
+
 union sI32ToByte
 {
     int32_t integer;
@@ -21,9 +23,12 @@ int ReadBT(int *sockBT);
 void CloseBT(int *sockBT);
 void DecodeVehicleData(uint8_t *readData,int8_t* stateMode,float* x,float* y,float* heading,float* yawAngle,float* yawRt,float* vel,float* odo);
 void DecodeCourseData(uint8_t* readData,int* CourseID,float* xNext,float* yNext,float* headNext,float* phiV,float* phiU,float* h);
+void SendCommandToVehicle(int8_t stateMode,int *sockBT);
+void SetupNcurses(void);
 int8_t VerifyCheckSum(uint8_t *arryToVerifyCheckSum,uint8_t nByte);
 
 int sockBT;
+int8_t stateMode;
 float x,y,heading,yawAngle,yawRt,vel,odo,xNext,yNext,headNext,phiV,phiU,h;
 int CourseID;
 
@@ -57,7 +62,6 @@ int ReadBT(int *sockBT)
 
     uint8_t vehicleDataRx[32] = {};
 
-    int8_t stateMode;
     while(i < readBytes){
         int readCounter = read(*sockBT, &readData[i], 1);
         //ヘッダ読み込み時処理
@@ -83,7 +87,7 @@ int ReadBT(int *sockBT)
         case 2:DecodeCourseData(readData,&CourseID,&xNext,&yNext,&headNext,&phiV,&phiU,&h);break; //コースデータのデコード
         default:break;
     }
-    std::cout<< "Mode,"<<stateMode << ",x," <<x<< ",y," <<y<< ",head," <<heading<< ",YAn," <<yawAngle<< ",YRt," <<yawRt<< ",Vel," <<vel<<std::endl;
+    std::cout << "Mode,"<< (int)stateMode << ",x," <<x<< ",y," <<y<< ",head," <<heading<< ",YAn," <<yawAngle<< ",YRt," <<yawRt<< ",Vel," << vel << ",Odo," << odo << std::endl;
     return 0;
 }
 
@@ -130,4 +134,29 @@ void DecodeCourseData(uint8_t* readData,int* CourseID,float* xNext,float* yNext,
     memcpy(I16BphiV.byte,&readData[14],2);*phiV = float(I16BphiV.integer) * 0.001;
     memcpy(I16BphiU.byte,&readData[16],2);*phiU = float(I16BphiU.integer) * 0.001;
     memcpy(uI16Bh.byte,&readData[18],2);*h = float(uI16Bh.integer) * 0.01;
+}
+
+void SendCommandToVehicle(int8_t stateMode,int *sockBT)
+{
+    uint8_t key = 0;
+    //車両状態表示,入力要求表示
+    switch(stateMode){
+        case 0x01 : std::cout << "press [c] key to calib." << std::endl; break;
+        case 0x03 : std::cout << "prepare to calib." << std::endl; break;
+        case 0x05 : std::cout << "calib..." << std::endl; break;
+        case 0x09 : std::cout << "press [r] key to start." << std::endl; break;
+        case 0x19 : std::cout << "press ANY key to stop." << std::endl; break;
+        default   : std::cout << "stop." <<std::endl; break;
+    }
+    key = getch();
+    if(key){write(*sockBT, &key, 1);};
+}
+
+void SetupNcurses(void)
+{
+    initscr();
+    cbreak();
+    noecho();
+    scrollok(stdscr, TRUE);
+    nodelay(stdscr, TRUE);
 }

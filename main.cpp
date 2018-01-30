@@ -26,7 +26,6 @@ int DrawLines(void);
 void DrawClothoid(float x0,float y0,float phi0,float h,float phiV,float phiU,int8_t n,Mat *image);
 void DrawClothoidSimple(float h,float phiV,float phiU,float odo,int8_t n,Mat *image);
 void ImageOverray(Mat plotImage,Mat camImage,Mat *outImage);
-
 float pi()
 {
   return 3.141593f;
@@ -34,7 +33,8 @@ float pi()
 
 int main(int argc, char *argv[])
 {
-    //OpenBT(&sockBT);
+    SetupNcurses();
+    OpenBT(&sockBT);
     CvSize imageSize = cvSize(200, 200);
     //カメラ検出
     VideoCapture cap(0);
@@ -43,14 +43,11 @@ int main(int argc, char *argv[])
 //    {
 //        return -1;
 //    }
-    //namedWindow("drawing", CV_WINDOW_AUTOSIZE|CV_WINDOW_FREERATIO);
-    //車両情報受信プログラム(bluetooth通信)
-    //if車両からクロソイドパラメータ受信した場合
-    /*作成する*/
-    //else if車両が走行中の場合
-        //車両挙動に合わせてplotImageを平行移動・回転させる
+    namedWindow("drawing", CV_WINDOW_AUTOSIZE|CV_WINDOW_FREERATIO);
+
     while(1){
-        //ReadBT(&sockBT);
+        ReadBT(&sockBT);
+        SendCommandToVehicle(stateMode,&sockBT);//車両状態・キーボード入力に応じてコマンド送信
         #if 1
         Mat plotImage(imageSize,CV_8UC3,Scalar(0,0,0));//デバッグ用に白いVer.
         //カメラ画像読み込み
@@ -58,7 +55,8 @@ int main(int argc, char *argv[])
         Mat camImage = imread("road.png");
         //plotImageにOverRay用クロソイド曲線描画
         //DrawClothoid(0.0f,0.0f,yawAngle,100.0f,0.0f,0.0f,10,&plotImage);
-        DrawClothoidSimple(100.0f,0.0f,0.0f,0.0f,10,&plotImage);
+        //DrawClothoidSimple(100.0f,0.0f,0.0f,0.0f,10,&plotImage);
+        DrawClothoidSimple(h,phiV,phiU,odo,10,&plotImage);
         //Overray画像作成プログラム
         Mat overrayImage;
         ImageOverray(plotImage,camImage,&overrayImage);
@@ -66,7 +64,7 @@ int main(int argc, char *argv[])
         waitKey(10);
         #endif
     }
-    //CloseBT(&sockBT);
+    CloseBT(&sockBT);
     return 0;
 }
 
