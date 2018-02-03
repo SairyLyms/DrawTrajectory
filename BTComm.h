@@ -18,7 +18,7 @@ union uI16ToByte
     uint8_t byte[sizeof(integer)];
 };
 
-int OpenBT(int *sockBT);
+void OpenBT(int *sockBT);
 int ReadBT(int *sockBT);
 void CloseBT(int *sockBT);
 void DecodeVehicleData(uint8_t *readData,int8_t* stateMode,float* x,float* y,float* heading,float* yawAngle,float* yawRt,float* vel,float* odo);
@@ -32,25 +32,26 @@ int8_t stateMode;
 float x,y,heading,yawAngle,yawRt,vel,odo,xNext,yNext,headNext,phiV,phiU,h;
 int CourseID;
 
-int OpenBT(int *sockBT)
+void OpenBT(int *sockBT)
 {
-    struct sockaddr_rc addr = { 0 };
-    int status;
-    char dest[18] = "20:15:12:29:14:76";
+    struct termios theTermios;
+    memset(&theTermios, 0, sizeof(struct termios));
+    cfmakeraw(&theTermios);
+    cfsetspeed(&theTermios, 115200);
 
-    // allocate a socket
-    *sockBT = socket(AF_BLUETOOTH, SOCK_STREAM, BTPROTO_RFCOMM);
+    theTermios.c_cflag = CREAD | CLOCAL;     // turn on READ
+    theTermios.c_cflag |= CS8;
+    theTermios.c_cc[VMIN] = 0;
+    theTermios.c_cc[VTIME] = 10;     // 1 sec timeout
+    ioctl(*sockBT, TIOCSETA, &theTermios);
 
-    // set the connection parameters (who to connect to)
-    addr.rc_family = AF_BLUETOOTH;
-    addr.rc_channel = (uint8_t) 1;
-    str2ba( dest, &addr.rc_bdaddr );
+    *sockBT = open("/dev/tty.RobotCAR-DevB", O_RDWR);
 
-    // connect to server
-    status = connect(*sockBT, (struct sockaddr *)&addr, sizeof(addr));
-    if( status < 0 ) perror("not establish the connection.");
+    if(*sockBT == -1)
+    {
+        std::cout << "Unable to open port" << std::endl;
+    }
 
-    return status;
 }
 
 int ReadBT(int *sockBT)
@@ -59,9 +60,8 @@ int ReadBT(int *sockBT)
     uint8_t readState = 0;
     uint8_t readBytes = 255;
     uint8_t readData[255] = {};
-
     uint8_t vehicleDataRx[32] = {};
-
+    std::string dispMessage;
     while(i < readBytes){
         int readCounter = read(*sockBT, &readData[i], 1);
         //ヘッダ読み込み時処理
@@ -87,7 +87,17 @@ int ReadBT(int *sockBT)
         case 2:DecodeCourseData(readData,&CourseID,&xNext,&yNext,&headNext,&phiV,&phiU,&h);break; //コースデータのデコード
         default:break;
     }
-    std::cout << "Mode,"<< (int)stateMode << ",x," <<x<< ",y," <<y<< ",head," <<heading<< ",YAn," <<yawAngle<< ",YRt," <<yawRt<< ",Vel," << vel << ",Odo," << odo << std::endl;
+    move(0,0);
+    dispMessage =   "Mode," + std::to_string((int)stateMode) + ",x," + std::to_string(x) + ",y," + std::to_string(y);
+    dispMessage +=  ",head," + std::to_string(heading) + ",YAn," + std::to_string(yawAngle) + ",YRt," + std::to_string(yawRt);
+    printw("%s",dispMessage.c_str());
+    move(1,0);
+    dispMessage =  ",Vel," + std::to_string(vel) + ",Odo," + std::to_string(odo);
+    printw("%s",dispMessage.c_str());
+    dispMessage =   "CourseID," + std::to_string(CourseID) + ",xNext," + std::to_string(xNext) + ",yNext," + std::to_string(yNext);
+    dispMessage +=  "headNext," + std::to_string(headNext) + ",phiV," + std::to_string(phiV) + ",phiU," + std::to_string(phiU);
+    move(2,0);
+    printw("%s",dispMessage.c_str());
     return 0;
 }
 
@@ -122,32 +132,39 @@ void DecodeVehicleData(uint8_t* readData,int8_t* stateMode,float* x,float* y,flo
     memcpy(uI16Bodo.byte,&readData[18],2);*odo = float(uI16Bodo.integer) * 0.01;
 }
 
-void DecodeCourseData(uint8_t* readData,int* CourseID,float* xNext,float* yNext,float* headNext,float* phiV,float* phiU,float* h)
+void DecodeCourseData(uint8_t* readData,int* courseID,float* xNext,float* yNext,float* headNext,float* phiV,float* phiU,float* h)
 {
     union sI32ToByte I32BxNext,I32ByNext;
-    union sI16ToByte I16BheadNext,I16BphiV,I16BphiU;
+    union sI16ToByte I16BheadNext,I16BphiV,I16BphiU,I16BcourseID;
     union uI16ToByte uI16Bh;
-    memcpy(&CourseID,&readData[2],2);
-    memcpy(I32BxNext.byte,&readData[4],4);*xNext = float(I32BxNext.integer) * 0.01;
-    memcpy(I32ByNext.byte,&readData[8],4);*yNext = float(I32ByNext.integer) * 0.01;
-    memcpy(I16BheadNext.byte,&readData[12],2);*headNext = float(I16BheadNext.integer) * 0.0001;
-    memcpy(I16BphiV.byte,&readData[14],2);*phiV = float(I16BphiV.integer) * 0.001;
-    memcpy(I16BphiU.byte,&readData[16],2);*phiU = float(I16BphiU.integer) * 0.001;
-    memcpy(uI16Bh.byte,&readData[18],2);*h = float(uI16Bh.integer) * 0.01;
+    static int lastCourseID = 0;
+    memcpy(I16BcourseID.byte,&readData[2],2);*courseID = int16_t(I16BcourseID.integer);
+    if(*courseID != lastCourseID){
+        memcpy(I32BxNext.byte,&readData[4],4);*xNext = float(I32BxNext.integer) * 0.01;
+        memcpy(I32ByNext.byte,&readData[8],4);*yNext = float(I32ByNext.integer) * 0.01;
+        memcpy(I16BheadNext.byte,&readData[12],2);*headNext = float(I16BheadNext.integer) * 0.0001;
+        memcpy(I16BphiV.byte,&readData[14],2);*phiV = float(I16BphiV.integer) * 0.001;
+        memcpy(I16BphiU.byte,&readData[16],2);*phiU = float(I16BphiU.integer) * 0.001;
+        memcpy(uI16Bh.byte,&readData[18],2);*h = float(uI16Bh.integer) * 0.01;
+    }
+    lastCourseID = *courseID;
 }
 
 void SendCommandToVehicle(int8_t stateMode,int *sockBT)
 {
+    std::string dispMessage;
     uint8_t key = 0;
     //車両状態表示,入力要求表示
     switch(stateMode){
-        case 0x01 : std::cout << "press [c] key to calib." << std::endl; break;
-        case 0x03 : std::cout << "prepare to calib." << std::endl; break;
-        case 0x05 : std::cout << "calib..." << std::endl; break;
-        case 0x09 : std::cout << "press [r] key to start." << std::endl; break;
-        case 0x19 : std::cout << "press ANY key to stop." << std::endl; break;
-        default   : std::cout << "stop." <<std::endl; break;
+        case 0x01 : dispMessage = "press [c] key to calib."; break;
+        case 0x03 : dispMessage = "prepare to calib."; break;
+        case 0x05 : dispMessage = "calib..."; break;
+        case 0x09 : dispMessage = "press [r] key to start."; break;
+        case 0x19 : dispMessage = "press ANY key to stop."; break;
+        default   : dispMessage = "stop."; break;
     }
+    move(3,0);
+    printw("%s",dispMessage.c_str());
     key = getch();
     if(key){write(*sockBT, &key, 1);};
 }
@@ -157,6 +174,6 @@ void SetupNcurses(void)
     initscr();
     cbreak();
     noecho();
-    scrollok(stdscr, TRUE);
+    //scrollok(stdscr, TRUE);
     nodelay(stdscr, TRUE);
 }

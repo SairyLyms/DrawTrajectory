@@ -8,6 +8,15 @@
         "cstring": "cpp",
         "ctime": "cpp",
         "cstdint": "cpp",
-        "initializer_list": "cpp"
+        "initializer_list": "cpp",
+        "__config": "cpp",
+        "__nullptr": "cpp",
+        "exception": "cpp",
+        "new": "cpp",
+        "stdexcept": "cpp",
+        "typeinfo": "cpp",
+        "algorithm": "cpp",
+        "string": "cpp",
+        "istream": "cpp"
     }
 }

@@ -16,8 +16,6 @@
 #include <opencv2/highgui.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <sys/socket.h>
-#include <bluetooth/bluetooth.h>
-#include <bluetooth/rfcomm.h>
 #include "BTComm.h"
 template<class T, size_t N> size_t countof(const T (&array)[N]) { return N; }
 using namespace cv;
@@ -37,15 +35,15 @@ int main(int argc, char *argv[])
     OpenBT(&sockBT);
     CvSize imageSize = cvSize(200, 200);
     //カメラ検出
-    VideoCapture cap(0);
+    //VideoCapture cap(0);
     //カメラ検出できない場合、エラーで終了
 //    if(!cap.isOpened())
 //    {
 //        return -1;
 //    }
     namedWindow("drawing", CV_WINDOW_AUTOSIZE|CV_WINDOW_FREERATIO);
-
     while(1){
+        erase();
         ReadBT(&sockBT);
         SendCommandToVehicle(stateMode,&sockBT);//車両状態・キーボード入力に応じてコマンド送信
         #if 1
@@ -56,12 +54,13 @@ int main(int argc, char *argv[])
         //plotImageにOverRay用クロソイド曲線描画
         //DrawClothoid(0.0f,0.0f,yawAngle,100.0f,0.0f,0.0f,10,&plotImage);
         //DrawClothoidSimple(100.0f,0.0f,0.0f,0.0f,10,&plotImage);
-        DrawClothoidSimple(h,phiV,phiU,odo,10,&plotImage);
+        DrawClothoidSimple(h * 10.0f,phiV,phiU,odo * 10.0f,10,&plotImage);
         //Overray画像作成プログラム
         Mat overrayImage;
         ImageOverray(plotImage,camImage,&overrayImage);
         imshow("drawing", overrayImage);
-        waitKey(10);
+        waitKey(1);
+        refresh();
         #endif
     }
     CloseBT(&sockBT);
@@ -99,7 +98,7 @@ void DrawClothoid(float x0,float y0,float phi0,float h,float phiV,float phiU,int
     //描画関数
     float xRend = -x + 100,yRend = -y + 100;
     clothoidPt[i] = Point(yRend,xRend);//Clothoid x,y rendering
-    circle (*image, clothoidPt[i], 5, cv::Scalar(200,180,0), -1, CV_AA);
+    circle (*image, clothoidPt[i], 1, cv::Scalar(200,180,0), -1, CV_AA);
   }
 }
 
@@ -132,11 +131,7 @@ void DrawClothoidSimple(float h,float phiV,float phiU,float odo,int8_t n,Mat *im
 
         x = h * std::abs(integral) * std::cos(std::arg(integral));
         y = h * std::abs(integral) * std::sin(std::arg(integral));
-#if 0
-        std::cout << "x,"<< x << "y," << y << std::endl;
-        std::cout << "arg,"<< std::arg(integral) << std::endl;
-        std::cout << "integral,"<< integral << std::endl;
-#endif
+
         //描画関数
         float xRend = -x + 100,yRend = -y + 100;
         clothoidPt[i] = Point(yRend,xRend);//Clothoid x,y rendering
