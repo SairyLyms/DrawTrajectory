@@ -22,15 +22,16 @@ void OpenBT(int *sockBT);
 int ReadBT(int *sockBT);
 void CloseBT(int *sockBT);
 void DecodeVehicleData(uint8_t *readData,int8_t* stateMode,float* x,float* y,float* heading,float* yawAngle,float* yawRt,float* vel,float* odo);
-void DecodeCourseData(uint8_t* readData,int* CourseID,float* xNext,float* yNext,float* headNext,float* phiV,float* phiU,float* h);
+void DecodeCourseData(uint8_t* readData,int16_t* courseID,float* xNext,float* yNext,float* headNext,float* phiV,float* phiU,float* h);
+void DecodeData(uint8_t* readData,int8_t* stateMode,int16_t* courseID,float* x,float* y,float* heading,float* yawAngle,float* yawRt,float* vel,float* odo,float* xNext,float* yNext,float* headNext,float* phiV,float* phiU,float* h);
 void SendCommandToVehicle(int8_t stateMode,int *sockBT);
 void SetupNcurses(void);
 int8_t VerifyCheckSum(uint8_t *arryToVerifyCheckSum,uint8_t nByte);
 
 int sockBT;
 int8_t stateMode;
+int16_t courseID;
 float x,y,heading,yawAngle,yawRt,vel,odo,xNext,yNext,headNext,phiV,phiU,h;
-int CourseID;
 
 void OpenBT(int *sockBT)
 {
@@ -60,7 +61,7 @@ int ReadBT(int *sockBT)
     uint8_t readState = 0;
     uint8_t readBytes = 255;
     uint8_t readData[255] = {};
-    uint8_t vehicleDataRx[32] = {};
+    uint8_t vehicleDataRx[64] = {};
     std::string dispMessage;
     while(i < readBytes){
         int readCounter = read(*sockBT, &readData[i], 1);
@@ -74,8 +75,8 @@ int ReadBT(int *sockBT)
         //フッタ読み込み時処理
         else if(readState == 1 && i>1 && readData[i-1] == 0xED && readData[i] == 0xDA){
             //チェックサム検証、OKでデータ読み出し
-            if(VerifyCheckSum(readData,32)){
-                memcpy(vehicleDataRx,readData,32);
+            if(VerifyCheckSum(readData,64)){
+                memcpy(vehicleDataRx,readData,64);
                 readState = 2;
                 break;
             }
@@ -83,8 +84,9 @@ int ReadBT(int *sockBT)
         i += readCounter;
     }
     switch(readData[0]){
-        case 1:DecodeVehicleData(readData,&stateMode,&x,&y,&heading,&yawAngle,&yawRt,&vel,&odo);break;   //車両データのデコード
-        case 2:DecodeCourseData(readData,&CourseID,&xNext,&yNext,&headNext,&phiV,&phiU,&h);break; //コースデータのデコード
+        case 0:DecodeData(readData,&stateMode,&courseID,&x,&y,&heading,&yawAngle,&yawRt,&vel,&odo,&xNext,&yNext,&headNext,&phiV,&phiU,&h);break;
+        //case 1:DecodeVehicleData(readData,&stateMode,&x,&y,&heading,&yawAngle,&yawRt,&vel,&odo);break;   //車両データのデコード
+        //case 2:DecodeCourseData(readData,&courseID,&xNext,&yNext,&headNext,&phiV,&phiU,&h);break; //コースデータのデコード
         default:break;
     }
     move(0,0);
@@ -94,7 +96,7 @@ int ReadBT(int *sockBT)
     move(1,0);
     dispMessage =  ",Vel," + std::to_string(vel) + ",Odo," + std::to_string(odo);
     printw("%s",dispMessage.c_str());
-    dispMessage =   "CourseID," + std::to_string(CourseID) + ",xNext," + std::to_string(xNext) + ",yNext," + std::to_string(yNext);
+    dispMessage =   "courseID," + std::to_string(courseID) + ",xNext," + std::to_string(xNext) + ",yNext," + std::to_string(yNext);
     dispMessage +=  "headNext," + std::to_string(headNext) + ",phiV," + std::to_string(phiV) + ",phiU," + std::to_string(phiU);
     move(2,0);
     printw("%s",dispMessage.c_str());
@@ -132,14 +134,14 @@ void DecodeVehicleData(uint8_t* readData,int8_t* stateMode,float* x,float* y,flo
     memcpy(uI16Bodo.byte,&readData[18],2);*odo = float(uI16Bodo.integer) * 0.01;
 }
 
-void DecodeCourseData(uint8_t* readData,int* courseID,float* xNext,float* yNext,float* headNext,float* phiV,float* phiU,float* h)
+void DecodeCourseData(uint8_t* readData,int16_t* courseID,float* xNext,float* yNext,float* headNext,float* phiV,float* phiU,float* h)
 {
     union sI32ToByte I32BxNext,I32ByNext;
     union sI16ToByte I16BheadNext,I16BphiV,I16BphiU,I16BcourseID;
     union uI16ToByte uI16Bh;
-    static int lastCourseID = 0;
+    static int lastcourseID = 0;
     memcpy(I16BcourseID.byte,&readData[2],2);*courseID = int16_t(I16BcourseID.integer);
-    if(*courseID != lastCourseID){
+    if(*courseID != lastcourseID){
         memcpy(I32BxNext.byte,&readData[4],4);*xNext = float(I32BxNext.integer) * 0.01;
         memcpy(I32ByNext.byte,&readData[8],4);*yNext = float(I32ByNext.integer) * 0.01;
         memcpy(I16BheadNext.byte,&readData[12],2);*headNext = float(I16BheadNext.integer) * 0.0001;
@@ -147,8 +149,31 @@ void DecodeCourseData(uint8_t* readData,int* courseID,float* xNext,float* yNext,
         memcpy(I16BphiU.byte,&readData[16],2);*phiU = float(I16BphiU.integer) * 0.001;
         memcpy(uI16Bh.byte,&readData[18],2);*h = float(uI16Bh.integer) * 0.01;
     }
-    lastCourseID = *courseID;
+    lastcourseID = *courseID;
 }
+
+void DecodeData(uint8_t* readData,int8_t* stateMode,int16_t* courseID,float* x,float* y,float* heading,float* yawAngle,float* yawRt,float* vel,float* odo,float* xNext,float* yNext,float* headNext,float* phiV,float* phiU,float* h)
+{
+    union sI32ToByte I32Bx,I32By,I32BxNext,I32ByNext;
+    union sI16ToByte I16Bheading,I16ByawAngle,I16ByawRt,I16BheadNext,I16BphiV,I16BphiU,I16BcourseID;
+    union uI16ToByte uI16Bvel,uI16Bodo,uI16Bh;
+    *stateMode = *(readData + 1);
+    memcpy(I16BcourseID.byte,&readData[2],2);*courseID = int16_t(I16BcourseID.integer);
+    memcpy(I32Bx.byte,&readData[4],4);*x = float(I32Bx.integer) * 0.01;
+    memcpy(I32By.byte,&readData[8],4);*y = float(I32By.integer) * 0.01;
+    memcpy(I16Bheading.byte,&readData[12],2);*heading = float(I16Bheading.integer) * 0.0001;
+    memcpy(I16ByawAngle.byte,&readData[14],2);*yawAngle = float(I16ByawAngle.integer) * 0.0001;
+    memcpy(I16ByawRt.byte,&readData[16],2);*yawRt = float(I16ByawRt.integer) * 0.001;
+    memcpy(uI16Bvel.byte,&readData[18],2);*vel = float(uI16Bvel.integer) * 0.01;
+    memcpy(uI16Bodo.byte,&readData[20],2);*odo = float(uI16Bodo.integer) * 0.01;
+    memcpy(I32BxNext.byte,&readData[22],4);*xNext = float(I32BxNext.integer) * 0.01;
+    memcpy(I32ByNext.byte,&readData[26],4);*yNext = float(I32ByNext.integer) * 0.01;
+    memcpy(I16BheadNext.byte,&readData[30],2);*headNext = float(I16BheadNext.integer) * 0.0001;
+    memcpy(I16BphiV.byte,&readData[32],2);*phiV = float(I16BphiV.integer) * 0.001;
+    memcpy(I16BphiU.byte,&readData[34],2);*phiU = float(I16BphiU.integer) * 0.001;
+    memcpy(uI16Bh.byte,&readData[36],2);*h = float(uI16Bh.integer) * 0.01;
+}
+
 
 void SendCommandToVehicle(int8_t stateMode,int *sockBT)
 {

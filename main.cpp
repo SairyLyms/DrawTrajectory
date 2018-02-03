@@ -49,12 +49,12 @@ int main(int argc, char *argv[])
         #if 1
         Mat plotImage(imageSize,CV_8UC3,Scalar(0,0,0));//デバッグ用に白いVer.
         //カメラ画像読み込み
-        //Mat camImage(Size(640, 640), CV_8UC3, Scalar(255,200,200));
-        Mat camImage = imread("road.png");
+        Mat camImage(Size(640, 640), CV_8UC3, Scalar(10,10,10));
+        //Mat camImage = imread("road.png");
         //plotImageにOverRay用クロソイド曲線描画
-        //DrawClothoid(0.0f,0.0f,yawAngle,100.0f,0.0f,0.0f,10,&plotImage);
+        DrawClothoid(0.0f,0.0f,yawAngle,100.0f,0.0f,0.0f,10,&plotImage);
         //DrawClothoidSimple(100.0f,0.0f,0.0f,0.0f,10,&plotImage);
-        DrawClothoidSimple(h * 10.0f,phiV,phiU,odo * 10.0f,10,&plotImage);
+        //DrawClothoidSimple(h * 10.0f,phiV,phiU,odo * 10.0f,10,&plotImage);
         //Overray画像作成プログラム
         Mat overrayImage;
         ImageOverray(plotImage,camImage,&overrayImage);
