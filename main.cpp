@@ -52,9 +52,9 @@ int main(int argc, char *argv[])
         Mat camImage(Size(640, 640), CV_8UC3, Scalar(10,10,10));
         //Mat camImage = imread("road.png");
         //plotImageにOverRay用クロソイド曲線描画
-        DrawClothoid(0.0f,0.0f,yawAngle,100.0f,0.0f,0.0f,10,&plotImage);
+        //DrawClothoid(0.0f,0.0f,yawAngle,100.0f,0.0f,0.0f,10,&plotImage);
         //DrawClothoidSimple(100.0f,0.0f,0.0f,0.0f,10,&plotImage);
-        //DrawClothoidSimple(h * 10.0f,phiV,phiU,odo * 10.0f,10,&plotImage);
+        DrawClothoidSimple(h * 10.0f,phiV,phiU,odo * 10.0f,10,&plotImage);
         //Overray画像作成プログラム
         Mat overrayImage;
         ImageOverray(plotImage,camImage,&overrayImage);
