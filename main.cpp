@@ -34,9 +34,11 @@ float pi()
 int main(int argc, char *argv[])
 {
     int sockBT;
-    
     SetupNcurses();
-    OpenBT(&sockBT);
+
+    sockBT = Serialport_init();
+    //OpenBT(&sockBT);
+
     CvSize imageSize = cvSize(200, 200);
     //カメラ検出
     VideoCapture cap(0);

@@ -18,6 +18,7 @@ union uI16ToByte
     uint8_t byte[sizeof(integer)];
 };
 
+int Serialport_init(void);
 int ReadBT(int *sockBT);
 void CloseBT(int *sockBT);
 void DecodeVehicleData(uint8_t *readData,int8_t* stateMode,float* x,float* y,float* heading,float* yawAngle,float* yawRt,float* vel,float* odo);
@@ -31,26 +32,75 @@ int8_t stateMode;
 int16_t courseID;
 float x,y,heading,yawAngle,yawRt,vel,odo,xNext,yNext,headNext,phiV,phiU,h;
 
-int OpenFD(int *fd)
+int Serialport_init(void)
 {
-    char port[] = "/dev/ttyUSB0";
-    struct termios tio;                 // シリアル通信設定
-    int baudRate = B115200;
+    const int baud = 115200;
+    const char serialport[] = "/dev/ttyUSB0";
+    struct termios toptions;
+    int fd;
+    
+    //fd = open(serialport, O_RDWR | O_NOCTTY | O_NDELAY);
+    fd = open(serialport, O_RDWR | O_NONBLOCK );
+    
+    if (fd == -1)  {
+        perror("serialport_init: Unable to open port ");
+        return -1;
+    }
+    
+    //int iflags = TIOCM_DTR;
+    //ioctl(fd, TIOCMBIS, &iflags);     // turn on DTR
+    //ioctl(fd, TIOCMBIC, &iflags);    // turn off DTR
 
-    *fd = open(port, O_RDWR);           // デバイスをオープンする
-    if( *fd < 0 ) perror("not establish the connection.");
+    if (tcgetattr(fd, &toptions) < 0) {
+        perror("serialport_init: Couldn't get term attributes");
+        return -1;
+    }
+    speed_t brate = baud; // let you override switch below if needed
+    switch(baud) {
+    case 4800:   brate=B4800;   break;
+    case 9600:   brate=B9600;   break;
+#ifdef B14400
+    case 14400:  brate=B14400;  break;
+#endif
+    case 19200:  brate=B19200;  break;
+#ifdef B28800
+    case 28800:  brate=B28800;  break;
+#endif
+    case 38400:  brate=B38400;  break;
+    case 57600:  brate=B57600;  break;
+    case 115200: brate=B115200; break;
+    }
+    cfsetispeed(&toptions, brate);
+    cfsetospeed(&toptions, brate);
 
-    tio.c_cflag += CREAD;               // 受信有効
-    tio.c_cflag += CLOCAL;              // ローカルライン（モデム制御なし）
-    tio.c_cflag += CS8;                 // データビット:8bit
-    tio.c_cflag += 0;                   // ストップビット:1bit
-    tio.c_cflag += 0;                   // パリティ:None
+    // 8N1
+    toptions.c_cflag &= ~PARENB;
+    toptions.c_cflag &= ~CSTOPB;
+    toptions.c_cflag &= ~CSIZE;
+    toptions.c_cflag |= CS8;
+    // no flow control
+    toptions.c_cflag &= ~CRTSCTS;
 
-    cfsetispeed( &tio, baudRate );
-    cfsetospeed( &tio, baudRate );
-    cfmakeraw(&tio);                    // RAWモード
-    tcsetattr(*fd, TCSANOW, &tio );     // デバイスに設定を行う
-    ioctl(*fd, TCSETS, &tio);           // ポートの設定を有効にする
+    //toptions.c_cflag &= ~HUPCL; // disable hang-up-on-close to avoid reset
+
+    toptions.c_cflag |= CREAD | CLOCAL;  // turn on READ & ignore ctrl lines
+    toptions.c_iflag &= ~(IXON | IXOFF | IXANY); // turn off s/w flow ctrl
+
+    toptions.c_lflag &= ~(ICANON | ECHO | ECHOE | ISIG); // make raw
+    toptions.c_oflag &= ~OPOST; // make raw
+
+    // see: http://unixwiz.net/techtips/termios-vmin-vtime.html
+    toptions.c_cc[VMIN]  = 0;
+    toptions.c_cc[VTIME] = 0;
+    //toptions.c_cc[VTIME] = 20;
+    
+    tcsetattr(fd, TCSANOW, &toptions);
+    if( tcsetattr(fd, TCSAFLUSH, &toptions) < 0) {
+        perror("init_serialport: Couldn't set term attributes");
+        return -1;
+    }
+
+    return fd;
 }
 
 
@@ -103,11 +153,13 @@ int ReadBT(int *sockBT)
         }
         i += readCounter;
     }
-    switch(readData[0]){
-        case 0:DecodeData(readData,&stateMode,&courseID,&x,&y,&heading,&yawAngle,&yawRt,&vel,&odo,&xNext,&yNext,&headNext,&phiV,&phiU,&h);break;
-        //case 1:DecodeVehicleData(readData,&stateMode,&x,&y,&heading,&yawAngle,&yawRt,&vel,&odo);break;   //車両データのデコード
-        //case 2:DecodeCourseData(readData,&courseID,&xNext,&yNext,&headNext,&phiV,&phiU,&h);break; //コースデータのデコード
-        default:break;
+    if(readState == 2){
+        switch(readData[0]){
+            case 0:DecodeData(readData,&stateMode,&courseID,&x,&y,&heading,&yawAngle,&yawRt,&vel,&odo,&xNext,&yNext,&headNext,&phiV,&phiU,&h);break;
+            //case 1:DecodeVehicleData(readData,&stateMode,&x,&y,&heading,&yawAngle,&yawRt,&vel,&odo);break;   //車両データのデコード
+            //case 2:DecodeCourseData(readData,&courseID,&xNext,&yNext,&headNext,&phiV,&phiU,&h);break; //コースデータのデコード
+            default:break;
+        }
     }
     move(0,0);
     dispMessage =   "Mode," + std::to_string((int)stateMode) + ",x," + std::to_string(x) + ",y," + std::to_string(y);
