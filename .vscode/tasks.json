@@ -32,7 +32,13 @@
                 "-lopencv_imgproc",
                 "-lopencv_flann",
                 "-lopencv_core",
-                "-lncurses"
+                "-lncurses",
+                "-lbluetooth",
+                "-lavutil",
+                "-lavcodec",
+                "-lavformat",
+                "-lswscale",
+                "-lpthread"
             ],
             "group": {
                 "kind": "build",

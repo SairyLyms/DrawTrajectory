@@ -1,4 +1,6 @@
 #include <ncurses.h>
+#include <bluetooth/bluetooth.h>
+#include <bluetooth/rfcomm.h>
 
 union sI32ToByte
 {
@@ -35,24 +37,21 @@ float x,y,heading,yawAngle,yawRt,vel,odo,xNext,yNext,headNext,phiV,phiU,h;
 
 void OpenBT(int *sockBT)
 {
-    struct termios theTermios;
-    memset(&theTermios, 0, sizeof(struct termios));
-    cfmakeraw(&theTermios);
-    cfsetspeed(&theTermios, 115200);
+    struct sockaddr_rc addr = { 0 };
+    int status;
+    char dest[18] = "20:15:12:29:14:76";
 
-    theTermios.c_cflag = CREAD | CLOCAL;     // turn on READ
-    theTermios.c_cflag |= CS8;
-    theTermios.c_cc[VMIN] = 0;
-    theTermios.c_cc[VTIME] = 10;     // 1 sec timeout
-    ioctl(*sockBT, TIOCSETA, &theTermios);
+    // allocate a socket
+    *sockBT = socket(AF_BLUETOOTH, SOCK_STREAM, BTPROTO_RFCOMM);
 
-    *sockBT = open("/dev/tty.RobotCAR-DevB", O_RDWR);
+    // set the connection parameters (who to connect to)
+    addr.rc_family = AF_BLUETOOTH;
+    addr.rc_channel = (uint8_t) 1;
+    str2ba( dest, &addr.rc_bdaddr );
 
-    if(*sockBT == -1)
-    {
-        std::cout << "Unable to open port" << std::endl;
-    }
-
+    // connect to server
+    status = connect(*sockBT, (struct sockaddr *)&addr, sizeof(addr));
+    if( status < 0 ) perror("not establish the connection.");
 }
 
 int ReadBT(int *sockBT)

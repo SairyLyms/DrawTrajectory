@@ -1,3 +1,4 @@
+
 #include <stdio.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -10,6 +11,8 @@
 #include <iostream>
 #include <complex>
 #include <string>
+#include <list>
+#include <thread>
 #include <opencv2/opencv.hpp>
 #include <opencv2/core.hpp>
 #include <opencv2/imgproc.hpp>
@@ -20,10 +23,19 @@
 template<class T, size_t N> size_t countof(const T (&array)[N]) { return N; }
 using namespace cv;
 
+// RTSP receive buffer list
+std::list<Mat> frames;
+VideoCapture cap;
+bool isRun;
+
+Mat camImage(cvSize(400, 400),CV_8UC3,Scalar(0,0,0));
+
 int DrawLines(void);
 void DrawClothoid(float x0,float y0,float phi0,float h,float phiV,float phiU,int8_t n,Mat *image);
 void DrawClothoidSimple(float h,float phiV,float phiU,float odo,int8_t n,Mat *image);
 void ImageOverray(Mat plotImage,Mat camImage,Mat *outImage);
+void StreamThread(bool* isRun);
+
 float pi()
 {
   return 3.141593f;
@@ -35,35 +47,43 @@ int main(int argc, char *argv[])
     OpenBT(&sockBT);
     CvSize imageSize = cvSize(200, 200);
     //カメラ検出
-    //VideoCapture cap(0);
+    cap.open("rtsp://192.168.1.1:554/MJPG?W=720&H=400&Q=50&BR=5000000/track1 ! latency=0 ! decodebin ! videoconvert ! appsink");
     //カメラ検出できない場合、エラーで終了
-//    if(!cap.isOpened())
-//    {
-//        return -1;
-//    }
+    if(!cap.isOpened())
+    {
+        return -1;
+    }
+
+    isRun = true;
+	//スレッド
+    std::thread(StreamThread,&isRun).detach();
+
     namedWindow("drawing", CV_WINDOW_AUTOSIZE|CV_WINDOW_FREERATIO);
-    while(1){
+    while(isRun){
+        Mat plotImage(imageSize,CV_8UC3,Scalar(0,0,0));//プロット用Matベース
         erase();
+        if (frames.size()){                      //カメラ画像読み込み
+                Rect rect(160, 0, 400, 400);
+                camImage = Mat(frames.back(), rect).clone(); //最新のフレームをトリミングして読み込み
+                frames.clear();                  //読み込んだらバッファクリア
+
+            }
         ReadBT(&sockBT);
         SendCommandToVehicle(stateMode,&sockBT);//車両状態・キーボード入力に応じてコマンド送信
-        #if 1
-        Mat plotImage(imageSize,CV_8UC3,Scalar(0,0,0));//デバッグ用に白いVer.
-        //カメラ画像読み込み
-        Mat camImage(Size(640, 640), CV_8UC3, Scalar(10,10,10));
-        //Mat camImage = imread("road.png");
         //plotImageにOverRay用クロソイド曲線描画
-        //DrawClothoid(0.0f,0.0f,yawAngle,100.0f,0.0f,0.0f,10,&plotImage);
+        //DrawClothoid(0.0f,0.0f,-yawAngle,100.0f,1.0f,0.0f,10,&plotImage);
         //DrawClothoidSimple(100.0f,0.0f,0.0f,0.0f,10,&plotImage);
         DrawClothoidSimple(h * 10.0f,phiV,phiU,odo * 10.0f,10,&plotImage);
         //Overray画像作成プログラム
         Mat overrayImage;
         ImageOverray(plotImage,camImage,&overrayImage);
+        resize(overrayImage, overrayImage, Size(), 2, 2);
         imshow("drawing", overrayImage);
-        waitKey(1);
+        waitKey(1);                                //imshow後忘れずに
         refresh();
-        #endif
     }
     CloseBT(&sockBT);
+	isRun = false;
     return 0;
 }
 
@@ -167,9 +187,9 @@ void ImageOverray(Mat plotImage,Mat camImage,Mat *outImage)
                                 Point2f(plotImageExpd.cols,                     0.0f ),
                                 Point2f(plotImageExpd.cols, 0.5f * plotImageExpd.rows)  };
 
-    const Point2f dst_pt[] = {  Point2f( 0.0f * plotImageExpd.cols , 0.5f * plotImageExpd.rows),
+    const Point2f dst_pt[] = {  Point2f( 0.0f * plotImageExpd.cols , 0.62f * plotImageExpd.rows),
                                 Point2f(-1.0f * plotImageExpd.cols ,        plotImageExpd.rows),
-                                Point2f( 1.0f * plotImageExpd.cols , 0.5f * plotImageExpd.rows),
+                                Point2f( 1.0f * plotImageExpd.cols , 0.62f * plotImageExpd.rows),
                                 Point2f( 2.0f * plotImageExpd.cols ,        plotImageExpd.rows)  };
 
     //Homography 行列を計算し変形
@@ -202,4 +222,15 @@ void ImageOverray(Mat plotImage,Mat camImage,Mat *outImage)
     merge(camImage_alpha, camImageDst_Alpha);
 
     *outImage = plotImageDst_rgb.mul(plotImageDst_Alpha,1.0/(double)maxVal) + camImage.mul(camImageDst_Alpha,1.0f/(double)maxVal);
+}
+
+
+// thread function for video getting and show
+void StreamThread(bool* isRun)
+{
+	Mat image;
+	while (*isRun){
+		cap >> image;
+		frames.push_back(image.clone());
+	}
 }
