@@ -32,7 +32,11 @@
                 "-lopencv_imgproc",
                 "-lopencv_flann",
                 "-lopencv_core",
-                "-lncurses"
+                "-lncurses",
+                "-lavutil",
+                "-lavcodec",
+                "-lavformat",
+                "-lswscale"
             ],
             "group": {
                 "kind": "build",
